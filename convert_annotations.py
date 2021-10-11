@@ -28,6 +28,9 @@ def parse_args():
                         default='bbox',
                         choices=['bbox', 'panoptic'],
                         help='type of annotations')
+    parser.add_argument('--apply-exif',
+                        dest='apply_exif',
+                        action='store_true')
     args = parser.parse_args()
     return args
 
@@ -35,6 +38,11 @@ args = parse_args()
 base_dir = args.path
 if not isinstance(args.subsets, list):
     args.subsets = [args.subsets]
+
+if args.apply_exif:
+    print("-" * 60)
+    print("We will apply exif orientation...")
+    print("-" * 60)
 
 for subset in args.subsets:
     # Convert annotations
@@ -134,8 +142,11 @@ for subset in args.subsets:
 
     # Convert image mnetadata
     print('converting image info ...')
-    image_dir = os.path.join(base_dir, subset)
-    oi['images'] = utils.convert_image_annotations(original_image_metadata, original_image_annotations, original_image_sizes, image_dir, oi['categories'], oi['licenses'])
+    if subset == 'val':
+        image_dir = os.path.join(base_dir, "validation")
+    else:
+        image_dir = os.path.join(base_dir, subset)
+    oi['images'] = utils.convert_image_annotations(original_image_metadata, original_image_annotations, original_image_sizes, image_dir, oi['categories'], oi['licenses'], args.apply_exif)
 
     # Convert instance annotations
     print('converting annotations ...')
