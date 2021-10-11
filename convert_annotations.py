@@ -30,7 +30,8 @@ def parse_args():
                         help='type of annotations')
     parser.add_argument('--apply-exif',
                         dest='apply_exif',
-                        action='store_true')
+                        action='store_true',
+                        help='apply the exif orientation correctly')
     args = parser.parse_args()
     return args
 
