@@ -281,7 +281,7 @@ def convert_image_annotations(
         if apply_exif:
             filename = os.path.join(image_dir, img["file_name"])
             image = read_image(filename, format="BGR")
-            if image.shape[1] != img["with"] or image.shape[0] != img["height"]:
+            if image.shape[1] != img["width"] or image.shape[0] != img["height"]:
                 print("before exif correction: ", img)
                 img["width"], img["height"] = image.shape[1], image.shape[0]
                 print("after exif correction: ", img)

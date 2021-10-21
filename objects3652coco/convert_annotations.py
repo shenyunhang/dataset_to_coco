@@ -110,6 +110,11 @@ for subset in args.subsets:
         "images/v1/patch15/objects365_v1_00712985.jpg",
         "images/v2/patch45/objects365_v2_02081009.jpg",
         "images/v2/patch16/objects365_v2_00904061.jpg",
+        "images/v1/patch3/objects365_v1_00162953.jpg",
+        "images/v2/patch26/objects365_v2_01339848.jpg",
+        "images/v2/patch31/objects365_v2_01524152.jpg",
+        "images/v1/patch3/objects365_v1_00175464.jpg",
+        "images/v2/patch44/objects365_v2_02037230.jpg",
     ]
     images = original_annotations["images"]
     for i in tqdm(range(len(images) - 1, -1, -1)):

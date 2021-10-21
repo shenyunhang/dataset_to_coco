@@ -327,7 +327,7 @@ def main(args):
         if args.apply_exif:
             filename = os.path.join(base_dir, img["file_name"])
             image = utils.read_image(filename, format="BGR")
-            if image.shape[1] != img["with"] or image.shape[0] != img["height"]:
+            if image.shape[1] != img["width"] or image.shape[0] != img["height"]:
                 print("before exif correction: ", img)
                 img["width"], img["height"] = image.shape[1], image.shape[0]
                 print("after exif correction: ", img)
@@ -368,6 +368,8 @@ def main(args):
             if name not in object_tokens:
                 continue
 
+            print(obj)
+
             synsets = obj["synsets"]
             object_id = obj["object_id"]
             # merged_object_ids = obj['merged_object_ids']
@@ -383,8 +385,11 @@ def main(args):
             ann["image_id"] = image_id
             ann["category_id"] = label_to_idx[name]
 
-            ann["bbox"] = [x, y, x + w, y + h]
+            # ann["bbox"] = [x, y, x + w, y + h]
+            ann["bbox"] = [x, y, w, h]
             ann["area"] = h * w
+
+            ann['iscrowd'] = False
 
             annotations.append(ann)
             if image_id in image_ids_train:
@@ -435,8 +440,8 @@ def main(args):
 
     # Convert image mnetadata
     print("converting image info ...")
-    oi_train["images"] = images
-    oi_val["images"] = images
+    oi_train["images"] = images_train
+    oi_val["images"] = images_val
 
     # Convert instance annotations
     print("converting annotations ...")
@@ -444,10 +449,11 @@ def main(args):
     oi_val["annotations"] = annotations_val
 
     # Write annotations into .json file
-    filename = os.path.join(base_dir, "annotations/", "visualgenome_train_box.json")
+    filename = os.path.join(base_dir, "annotations/", "visualgenome_box_train.json")
     print("writing output to {}".format(filename))
     json.dump(oi_train, open(filename, "w"))
-    filename = os.path.join(base_dir, "annotations/", "visualgenome_val_box.json")
+
+    filename = os.path.join(base_dir, "annotations/", "visualgenome_box_val.json")
     print("writing output to {}".format(filename))
     json.dump(oi_val, open(filename, "w"))
     print("Done")
