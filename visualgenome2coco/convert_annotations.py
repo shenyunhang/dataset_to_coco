@@ -389,7 +389,7 @@ def main(args):
             ann["bbox"] = [x, y, w, h]
             ann["area"] = h * w
 
-            ann['iscrowd'] = False
+            ann["iscrowd"] = False
 
             annotations.append(ann)
             if image_id in image_ids_train:

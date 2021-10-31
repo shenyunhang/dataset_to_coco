@@ -5,9 +5,14 @@ import os.path as osp
 import pathlib
 
 import numpy as np
+from nltk.corpus import wordnet as wn
 from PIL import Image
 
 import utils
+
+# import nltk
+# nltk.download('wordnet')
+
 
 folder_classes = []
 
@@ -152,7 +157,8 @@ def parse_args():
     parser.add_argument("--max-per-cat", help="max per cat")
     parser.add_argument("--num-labels", help="number of labels")
     parser.add_argument(
-        "--category-file", help="reset categories according to this category json file path"
+        "--category-file",
+        help="reset categories according to this category json file path by matching wordnet id",
     )
     args = parser.parse_args()
     return args
@@ -249,6 +255,38 @@ def main():
         min_id = min(all_id)
         for category in categories:
             category["id"] -= min_id
+
+        wnid_to_new_category_id = {}
+        for category in categories:
+            name = category["name"]
+            synset = category["synset"]
+
+            category_id = category["id"]
+
+            try:
+                synset = wn.synset(synset)
+
+                offset = synset.offset()
+                wnid = "n{:08d}".format(offset)
+
+                category["wnid"] = wnid
+                wnid_to_new_category_id[wnid] = category_id
+
+            except Exception as e:
+                category["wnid"] = name
+                wnid_to_new_category_id[name] = category_id
+                print(e)
+
+        old_category_id_to_wnid = {}
+        for category in annotations["categories"]:
+            old_category_id_to_wnid[category["id"]] = category["name"]
+
+        for anno in annotations["annotations"]:
+            wnid = old_category_id_to_wnid[anno["category_id"]]
+
+            category_id = wnid_to_new_category_id[wnid]
+
+            anno["category_id"] = category_id
 
         annotations["categories"] = categories
 
