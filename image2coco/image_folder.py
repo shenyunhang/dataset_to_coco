@@ -3,6 +3,8 @@ import json
 import os
 import os.path as osp
 import pathlib
+import random
+from distutils.util import strtobool
 
 import numpy as np
 from PIL import Image
@@ -12,7 +14,7 @@ import utils
 folder_classes = []
 
 
-def cvt_annotations(img_name_paths, out_file, has_labels):
+def cvt_annotations(path_h_w, out_file, has_instance, has_segmentation):
     label_ids = {name: i for i, name in enumerate(folder_classes)}
     print("label_ids: ", label_ids)
 
@@ -21,7 +23,7 @@ def cvt_annotations(img_name_paths, out_file, has_labels):
     file_client_args = dict(backend="disk")
     color_type = "color"
 
-    for i, [img_name, img_path, height, width] in enumerate(img_name_paths):
+    for i, [img_path, height, width] in enumerate(path_h_w):
         if i % 1000 == 0:
             print(i)
         # if i > 10000:
@@ -30,7 +32,7 @@ def cvt_annotations(img_name_paths, out_file, has_labels):
 
         wnid = pathlib.PurePath(img_path).parent.name
 
-        if has_labels:
+        if has_instance:
             bboxes = [[1, 1, width, height]]
             labels = [label_ids[wnid]]
 
@@ -41,7 +43,7 @@ def cvt_annotations(img_name_paths, out_file, has_labels):
             labels = (np.zeros((0,), dtype=np.int64),)
 
         annotation = {
-            "filename": os.path.join(wnid, img_name),
+            "filename": img_path,
             "width": width,
             "height": height,
             "ann": {
@@ -53,7 +55,7 @@ def cvt_annotations(img_name_paths, out_file, has_labels):
         }
 
         annotations.append(annotation)
-    annotations = cvt_to_coco_json(annotations)
+    annotations = cvt_to_coco_json(annotations, has_segmentation)
 
     with open(out_file, "w") as f:
         json.dump(annotations, f)
@@ -61,7 +63,7 @@ def cvt_annotations(img_name_paths, out_file, has_labels):
     return annotations
 
 
-def cvt_to_coco_json(annotations):
+def cvt_to_coco_json(annotations, has_segmentation):
     image_id = 0
     annotation_id = 0
     coco = dict()
@@ -73,24 +75,25 @@ def cvt_to_coco_json(annotations):
 
     def addAnnItem(annotation_id, image_id, category_id, bbox, difficult_flag):
         annotation_item = dict()
-        annotation_item["segmentation"] = []
+        if has_segmentation:
+            annotation_item["segmentation"] = []
 
-        seg = []
-        # bbox[] is x1,y1,x2,y2
-        # left_top
-        seg.append(int(bbox[0]))
-        seg.append(int(bbox[1]))
-        # left_bottom
-        seg.append(int(bbox[0]))
-        seg.append(int(bbox[3]))
-        # right_bottom
-        seg.append(int(bbox[2]))
-        seg.append(int(bbox[3]))
-        # right_top
-        seg.append(int(bbox[2]))
-        seg.append(int(bbox[1]))
+            seg = []
+            # bbox[] is x1,y1,x2,y2
+            # left_top
+            seg.append(int(bbox[0]))
+            seg.append(int(bbox[1]))
+            # left_bottom
+            seg.append(int(bbox[0]))
+            seg.append(int(bbox[3]))
+            # right_bottom
+            seg.append(int(bbox[2]))
+            seg.append(int(bbox[3]))
+            # right_top
+            seg.append(int(bbox[2]))
+            seg.append(int(bbox[1]))
 
-        annotation_item["segmentation"].append(seg)
+            annotation_item["segmentation"].append(seg)
 
         xywh = np.array([bbox[0], bbox[1], bbox[2] - bbox[0], bbox[3] - bbox[1]])
         annotation_item["area"] = int(xywh[2] * xywh[3])
@@ -145,63 +148,93 @@ def cvt_to_coco_json(annotations):
     return coco
 
 
+def get_filename_key(x):
+
+    basename = os.path.basename(x)
+    if basename[:-4].isdigit():
+        return int(basename[:-4])
+
+    return basename
+
+
+def _strtobool(x):
+    return bool(strtobool(x))
+
+
 def parse_args():
     parser = argparse.ArgumentParser(description="Convert image list to coco format")
-    parser.add_argument("--img-root", help="img root")
-    parser.add_argument("--out-file", help="output path")
-    parser.add_argument("--max-per-cat", help="max per cat")
-    parser.add_argument("--num-labels", help="number of labels")
-    parser.add_argument(
-        "--category-file", help="reset categories according to this category json file path"
-    )
+    parser.add_argument("--img-root", help="img root", required=True)
+    parser.add_argument("--out-file", help="output path", required=True)
+    parser.add_argument("--key-path", help="key path")
+    parser.add_argument("--filter-file", help="filter file")
+    parser.add_argument("--category-file", help="reset categories by this json file")
+    parser.add_argument('--max-per-dir', nargs='?', const=1e10, type=int, default=1e10, help="max per dir")
+    parser.add_argument('--num-labels', nargs='?', const=0, type=int, default=0, help="number of labels")
+    parser.add_argument('--has-instance', nargs='?', const=True, type=_strtobool, default=True, help="has instance")
+    parser.add_argument('--has-segmentation', nargs='?', const=True, type=_strtobool, default=True, help="has segmentation")
+    parser.add_argument('--has-shuffle', nargs='?', const=False, type=_strtobool, default=False, help="shuffle or sort")
     args = parser.parse_args()
     return args
 
 
 def main():
-    args = parse_args()
-    out_file = args.out_file
-    img_root = args.img_root
-    max_per_cat = int(args.max_per_cat)
-    has_labels = True
-    num_labels = int(args.num_labels)
-
-    category_file = args.category_file
-
     global folder_classes
 
-    fns = []
+    args = parse_args()
+    print(args)
+
+    img_root = args.img_root
+    out_file = args.out_file
+
+    key_path = args.key_path
+    category_file = args.category_file
+    filter_file = args.filter_file
+
+    max_per_dir = args.max_per_dir
+    num_labels = args.num_labels
+
+    has_instance = args.has_instance
+    has_segmentation = args.has_segmentation
+
+    has_shuffle = args.has_shuffle
+
+    if filter_file:
+        with open(filter_file, 'r') as f:
+            keeps = [line.strip() for line in f.readlines()]
+    else:
+        keeps = None
+
+    path_h_w = []
     cnt = 0
-    wnid = ""
     for root, dirs, files in os.walk(img_root):
+        files = [f for f in files if f.endswith(('.jpg', '.JPG', '.png', '.PNG', '.jpeg', '.JPEG'))]
+
+        if has_shuffle:
+            random.shuffle(files)
+        else:
+            files = sorted(files, key=lambda x: get_filename_key(x), reverse=False)
+
         cnt_per_dir = 0
         for name in files:
-            if cnt % 1000 == 0:
-                print(cnt)
-
             # if cnt >= 10:
             #     break
 
-            if max_per_cat > 0 and cnt_per_dir >= max_per_cat:
+            if max_per_dir > 0 and cnt_per_dir >= max_per_dir:
                 break
 
-            if name.endswith(".jpg") or name.endswith(".JPG"):
-                pass
-            elif name.endswith(".png") or name.endswith(".PNG"):
-                pass
-            elif name.endswith(".jpeg") or name.endswith(".JPEG"):
-                pass
-            else:
-                print("skipping: ", name)
+            path = os.path.join(root, name)
+            rpath = path.replace(img_root, "")
+
+            if keeps and rpath not in keeps:
                 continue
 
-            path = os.path.join(root, name)
+            if key_path and key_path not in path:
+                continue
 
             wnid = pathlib.PurePath(path).parent.name
 
             if wnid not in folder_classes:
                 folder_classes.append(wnid)
-
             try:
                 img = utils.read_image(path, format="BGR")
                 height, width, _ = img.shape
@@ -209,20 +242,24 @@ def main():
                 print("*" * 60)
                 print("fail to open image: ", e)
                 print("*" * 60)
+                continue
 
-            # if width < 224 or height < 224:
-            #     continue
+            if width < 224 or height < 224:
+                continue
 
             # if width >  1000 or height > 1000:
             #     continue
 
-            fns.append([name, path, height, width])
+            path_h_w.append([rpath, height, width])
 
-            # print(name, path, pathlib.PurePath(path).parent.name)
+            # print(rpath, os.path.basename(rpath))
             cnt_per_dir += 1
             cnt += 1
 
-        print("folder: ", wnid, " number: ", cnt_per_dir)
+            if cnt % 1000 == 0:
+                print(cnt)
+
+        print("folder: ", root, " number: ", cnt_per_dir)
 
         # for dirname in dirs:
         #     folder_classes.append(dirname)
@@ -234,7 +271,7 @@ def main():
     print("categories", len(folder_classes), ":", folder_classes)
     print("image number: ", cnt)
 
-    annotations = cvt_annotations(fns, out_file, has_labels)
+    annotations = cvt_annotations(path_h_w, out_file, has_instance, has_segmentation)
     print("Done!")
 
     if category_file:
@@ -254,6 +291,8 @@ def main():
 
         with open(out_file, "w") as f:
             json.dump(annotations, f)
+
+    print(args)
 
 
 if __name__ == "__main__":
